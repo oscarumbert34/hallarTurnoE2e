@@ -28,6 +28,7 @@ export type BusinessConfiguration = {
   depositEnabled: boolean;
   appointmentConfirmationEnabled: boolean;
   internalBookingCreation: boolean;
+  virtualQueueEnabled?: boolean;
 };
 
 export async function authenticatedFixture(request: APIRequestContext): Promise<AuthFixture> {
