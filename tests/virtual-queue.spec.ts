@@ -134,6 +134,50 @@ test.describe.serial('fila virtual', () => {
     expect((await entriesResponse.json()) as QueueEntry[]).toEqual([]);
   });
 
+  test('dos personas que se suman al mismo tiempo reciben posiciones consecutivas', async ({
+    request,
+  }) => {
+    const queue = await openQueue(request);
+    const firstCustomer = uniqueCustomer('Fila simultánea A');
+    const secondCustomer = uniqueCustomer('Fila simultánea B');
+    const joinUrl = `${env.backendUrl}/api/v1/virtual-queues/${topology.branchId}/join`;
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      request.post(joinUrl, {
+        data: { customerName: firstCustomer.name, phone: firstCustomer.phone },
+      }),
+      request.post(joinUrl, {
+        data: { customerName: secondCustomer.name, phone: secondCustomer.phone },
+      }),
+    ]);
+
+    expect(
+      firstResponse.status(),
+      `Falló el primer ingreso simultáneo: ${await firstResponse.text()}`,
+    ).toBe(201);
+    expect(
+      secondResponse.status(),
+      `Falló el segundo ingreso simultáneo: ${await secondResponse.text()}`,
+    ).toBe(201);
+
+    const joined = [
+      (await firstResponse.json()) as QueueEntry & { position: number },
+      (await secondResponse.json()) as QueueEntry & { position: number },
+    ];
+    expect(joined.map((entry) => entry.position).sort((a, b) => a - b)).toEqual([1, 2]);
+
+    const entriesResponse = await request.get(
+      `${env.backendUrl}/api/v1/virtual-queues/${queue.id}/entries`,
+      { headers: authHeaders() },
+    );
+    expect(entriesResponse.ok()).toBeTruthy();
+    const entries = (await entriesResponse.json()) as Array<QueueEntry & { position: number }>;
+    expect(entries.map((entry) => entry.customerName)).toEqual(
+      expect.arrayContaining([firstCustomer.name, secondCustomer.name]),
+    );
+    expect(entries.map((entry) => entry.position)).toEqual([1, 2]);
+  });
+
   async function currentQueue(request: APIRequestContext): Promise<Queue | null> {
     const response = await request.get(
       `${env.backendUrl}/api/v1/virtual-queues/branch/${topology.branchId}`,
